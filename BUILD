@@ -12,20 +12,9 @@ cc_binary(
     ], 
     linkopts = [
         "-rdynamic",
-        "-Lexternal/toolchains_arm_gnu~~arm_toolchain~aarch64_none_linux_gnu_linux_x86_64/aarch64-none-linux-gnu/libc/usr/lib64",
-        "-static-libstdc++", 
-        "-static-libgcc",
-        "-static",
-        "-Wl,--start-group",
-        "-lstdc++",
         "-lpthread",
-        "-latomic",
-        "-l:libm-2.38.a",
-        "-l:libmvec.a",
-        "-lc",
-        "-Wl,--end-group",
+        "-lm",
     ],
-    linkstatic = True,
 )
 
 platform(

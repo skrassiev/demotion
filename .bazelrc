@@ -1,3 +1,5 @@
-# Force the use of the downloaded ARM toolchain when targeting rpi3
+# Force the use of the hermetic platform when targeting rpi3
 build:rpi3 --platforms=//:rpi3
-build:rpi3 --extra_toolchains=@aarch64_none_linux_gnu//toolchain:all
+
+# Enable toolchain resolution for C++
+build --incompatible_enable_cc_toolchain_resolution

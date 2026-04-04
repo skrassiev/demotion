@@ -12,7 +12,7 @@
 #include <condition_variable>
 #include <queue>
 #include <expected>
-#include <stop_token>
+#include <atomic>
 #include <execinfo.h>
 #include <csignal>
 #include <cstdlib>
@@ -102,13 +102,20 @@ struct ConversionTask {
 
 class CameraService {
 public:
-    CameraService() {
+    CameraService() : stop_requested(false) {
         fs::create_directories(temp_dir);
         fs::create_directories(final_dir);
-        // jthread automatically joins on destruction
-        worker = std::jthread([this](std::stop_token st) {
-            process_conversions(st);
+        worker = std::thread([this]() {
+            process_conversions();
         });
+    }
+
+    ~CameraService() {
+        stop_requested = true;
+        cv.notify_all();
+        if (worker.joinable()) {
+            worker.join();
+        }
     }
 
     std::expected<void, std::string> run() {
@@ -161,9 +168,10 @@ public:
 private:
     const std::string temp_dir = "./temp_recordings";
     const std::string final_dir = "./videos";
-    std::jthread worker;
+    std::thread worker;
+    std::atomic<bool> stop_requested;
     std::mutex mtx;
-    std::condition_variable_any cv; // Use _any for stop_token compatibility
+    std::condition_variable cv;
     std::queue<ConversionTask> tasks;
     std::chrono::steady_clock::time_point start_time;
 
@@ -187,15 +195,14 @@ private:
         cv.notify_one();
     }
 
-    void process_conversions(std::stop_token st) {
-        while (!st.stop_requested()) {
+    void process_conversions() {
+        while (!stop_requested) {
             ConversionTask task;
             {
                 std::unique_lock lock(mtx);
-                // Wait until a task exists OR the service is shutting down
-                cv.wait(lock, st, [this] { return !tasks.empty(); });
+                cv.wait(lock, [this] { return !tasks.empty() || stop_requested; });
 
-                if (st.stop_requested() && tasks.empty()) return;
+                if (stop_requested && tasks.empty()) return;
 
                 task = tasks.front();
                 tasks.pop();
@@ -221,4 +228,3 @@ int main() {
     }
     return 0;
 }
-

@@ -1,19 +1,22 @@
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
 
-# Fetch the ARM GNU toolchain
-bazel_dep(name = "toolchains_arm_gnu", version = "1.0.1")
+# Configure the hermetic toolchain (Clang-based via Zig)
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+use_repo(toolchains, "zig_sdk")
 
-arm_toolchain = use_extension("@toolchains_arm_gnu//:extensions.bzl", "arm_toolchain")
-arm_toolchain.aarch64_none_linux_gnu(
-    version = "13.2.1",
+# Register toolchains for common hosts and aarch64 target
+# Use a newer glibc version to ensure better C++20 support
+register_toolchains(
+    "@zig_sdk//toolchain:linux_amd64_gnu.2.31",
+    "@zig_sdk//toolchain:linux_arm64_gnu.2.31",
 )
-use_repo(arm_toolchain, "aarch64_none_linux_gnu")
 
 # For Bzlmod (MODULE.bazel)
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 git_override(
     module_name = "hedron_compile_commands",
     remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
-    commit = "abb61a688167623088f8768cc9264798df6a9d10", # Use the latest commit hash
+    commit = "abb61a688167623088f8768cc9264798df6a9d10",
 )
