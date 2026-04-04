@@ -13,9 +13,87 @@
 #include <queue>
 #include <expected>
 #include <stop_token>
+#include <execinfo.h>
+#include <csignal>
+#include <cstdlib>
 
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
+
+[[gnu::noinline]] void print_stack_dump() {
+    void* array[50];
+    int size = backtrace(array, 50);
+    char** symbols = backtrace_symbols(array, size);
+
+    if (symbols == nullptr) {
+        std::cerr << "Failed to generate stack symbols." << std::endl;
+        return;
+    }
+
+    std::cerr << "\nStack crash dump:" << std::endl;
+    for (int i = 0; i < size; ++i) {
+        std::string symbol = symbols[i];
+
+        size_t start = symbol.find('[');
+        size_t end = symbol.find(']');
+        if (start != std::string::npos && end != std::string::npos && end > start) {
+            std::string addr = symbol.substr(start + 1, end - start - 1);
+            // Use addr2line to get function and line info. -p for pretty, -C for demangle, -e for executable.
+            std::string cmd = std::format("addr2line -e /proc/self/exe -p -C {} 2>/dev/null", addr);
+            FILE* fp = popen(cmd.c_str(), "r");
+            if (fp) {
+                char buffer[1024];
+                if (fgets(buffer, sizeof(buffer), fp)) {
+                    std::string line(buffer);
+                    if (line.find("main.cc") != std::string::npos) {
+                        // For main.cc, print the full line (including line numbers).
+                        std::cerr << std::format("#{} {}", i, line);
+                    } else {
+                        // For other files, strip the ' at ...' part to hide line numbers.
+                        size_t pos = line.find(" at ");
+                        if (pos != std::string::npos) {
+                            std::cerr << std::format("#{} {}", i, line.substr(0, pos)) << std::endl;
+                        } else {
+                            std::cerr << std::format("#{} {}", i, line);
+                        }
+                    }
+                } else {
+                    std::cerr << std::format("#{} {}", i, symbol) << std::endl;
+                }
+                pclose(fp);
+            } else {
+                std::cerr << std::format("#{} {}", i, symbol) << std::endl;
+            }
+        } else {
+            std::cerr << std::format("#{} {}", i, symbol) << std::endl;
+        }
+    }
+    free(symbols);
+}
+
+void signal_handler(int sig) {
+    std::cerr << std::format("\nCaught fatal signal: {}", sig) << std::endl;
+    print_stack_dump();
+    std::exit(sig);
+}
+
+void setup_crash_handler() {
+    struct sigaction sa;
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGABRT, &sa, nullptr);
+    sigaction(SIGILL, &sa, nullptr);
+    sigaction(SIGFPE, &sa, nullptr);
+
+    std::set_terminate([]() {
+        std::cerr << "Uncaught runtime exception!" << std::endl;
+        print_stack_dump();
+        std::exit(1);
+    });
+}
 
 struct ConversionTask {
     std::string src;
@@ -36,7 +114,7 @@ public:
     std::expected<void, std::string> run() {
         std::string cmd = "rpicam-vid -t 0 --inline --nopreview --width 1280 --height 720 "
                           "--framerate 30 --lores-width 160 --lores-height 120 "
-                          "--post-process-file motion_detect.json -o -";
+                          "--post-process-file motion_detect.json -o - 2>&1";
 
         FILE* pipe = popen(cmd.c_str(), "r");
         if (!pipe) return std::unexpected("Failed to open rpicam-vid pipe");
@@ -49,13 +127,16 @@ public:
         std::ofstream out_file;
         std::string current_temp_path;
 
-        // Monitor stderr for the "Motion detected" string from the RPi post-processor
-        while (fgets(buffer.data(), buffer.size(), stderr)) {
-            std::string line(buffer.data());
-        std::cout << "Here" << std::endl;
+        // Monitor pipe (stdout + stderr) for the "Motion detected" string
+        while (true) {
+            size_t bytes_read = fread(buffer.data(), 1, buffer.size(), pipe);
+            if (bytes_read == 0) break;
+
+            std::string_view chunk(buffer.data(), bytes_read);
             auto now = std::chrono::steady_clock::now();
 
-            if (line.find("Motion detected") != std::string::npos) {
+            if (chunk.find("Motion detected") != std::string::npos) {
+                std::cout << "--- Motion detected signal received ---" << std::endl;
                 last_motion = now;
                 if (!recording) {
                     start_recording(recording, out_file, current_temp_path);
@@ -63,6 +144,9 @@ public:
             }
 
             if (recording) {
+                // Write captured video data to the output file
+                out_file.write(buffer.data(), bytes_read);
+
                 // Logic: Keep recording until 5s of silence OR 5m of total time
                 if (now - last_motion > 5s || now - start_time > 5min) {
                     stop_recording(recording, out_file, current_temp_path);
@@ -127,11 +211,13 @@ private:
 };
 
 int main() {
+    setup_crash_handler();
     CameraService service;
     auto result = service.run();
     if (!result) {
-        std::cerr << std::format("Error: {}", result.error()) << std::endl;
-        return 1;
+        std::cerr << std::format("\nRuntime Error: {}", result.error()) << std::endl;
+        print_stack_dump();
+        std::exit(1);
     }
     return 0;
 }
