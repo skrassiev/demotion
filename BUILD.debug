@@ -1,0 +1,5 @@
+genrule(
+    name = "debug_sandbox",
+    outs = ["debug_sandbox.txt"],
+    cmd = "find . -maxdepth 5 > $@",
+)
