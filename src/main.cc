@@ -1,11 +1,18 @@
 #include <iostream>
 #include <string>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <cstdio>
 #include <array>
 #include <queue>
+#include <atomic>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <format>
+#include <expected>
 #include <execinfo.h>
 #include <csignal>
 #include <cstdlib>
@@ -13,13 +20,10 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/usage.h"
-#include "absl/status/status.h"
-#include "absl/strings/str_format.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/time/time.h"
 #include "absl/cleanup/cleanup.h"
 
 namespace fs = std::filesystem;
+using namespace std::chrono_literals;
 
 ABSL_FLAG(std::string, temp_dir, "./temp_recordings", "Directory for temporary recordings");
 ABSL_FLAG(std::string, final_dir, "./videos", "Directory for finalized MP4 videos");
@@ -42,7 +46,7 @@ ABSL_FLAG(std::string, final_dir, "./videos", "Directory for finalized MP4 video
         size_t end = symbol.find(']');
         if (start != std::string::npos && end != std::string::npos && end > start) {
             std::string addr = symbol.substr(start + 1, end - start - 1);
-            std::string cmd = absl::StrFormat("addr2line -e /proc/self/exe -p -C %s 2>/dev/null", addr);
+            std::string cmd = std::format("addr2line -e /proc/self/exe -p -C {} 2>/dev/null", addr);
             FILE* fp = popen(cmd.c_str(), "r");
             if (fp) {
                 absl::Cleanup closer = [fp] { pclose(fp); };
@@ -50,30 +54,30 @@ ABSL_FLAG(std::string, final_dir, "./videos", "Directory for finalized MP4 video
                 if (fgets(buffer, sizeof(buffer), fp)) {
                     std::string line(buffer);
                     if (line.find("main.cc") != std::string::npos) {
-                        std::cerr << absl::StrFormat("#%d %s", i, line);
+                        std::cerr << std::format("#{} {}", i, line);
                     } else {
                         size_t pos = line.find(" at ");
                         if (pos != std::string::npos) {
-                            std::cerr << absl::StrFormat("#%d %s\n", i, line.substr(0, pos));
+                            std::cerr << std::format("#{} {}\n", i, line.substr(0, pos));
                         } else {
-                            std::cerr << absl::StrFormat("#%d %s", i, line);
+                            std::cerr << std::format("#{} {}", i, line);
                         }
                     }
                 } else {
-                    std::cerr << absl::StrFormat("#%d %s\n", i, symbol);
+                    std::cerr << std::format("#{} {}\n", i, symbol);
                 }
             } else {
-                std::cerr << absl::StrFormat("#%d %s\n", i, symbol);
+                std::cerr << std::format("#{} {}\n", i, symbol);
             }
         } else {
-            std::cerr << absl::StrFormat("#%d %s\n", i, symbol);
+            std::cerr << std::format("#{} {}\n", i, symbol);
         }
     }
     free(symbols);
 }
 
 void signal_handler(int sig) {
-    std::cerr << absl::StrFormat("\nCaught fatal signal: %d\n", sig);
+    std::cerr << std::format("\nCaught fatal signal: {}\n", sig);
     print_stack_dump();
     std::exit(sig);
 }
@@ -105,7 +109,8 @@ class CameraService {
 public:
     CameraService(std::string temp_dir, std::string final_dir) 
         : temp_dir_(std::move(temp_dir)), 
-          final_dir_(std::move(final_dir)) {
+          final_dir_(std::move(final_dir)),
+          stop_requested_(false) {
         fs::create_directories(temp_dir_);
         fs::create_directories(final_dir_);
         worker_ = std::thread([this]() {
@@ -115,27 +120,28 @@ public:
 
     ~CameraService() {
         {
-            absl::MutexLock lock(&mtx_);
+            std::lock_guard lock(mtx_);
             stop_requested_ = true;
         }
+        cv_.notify_all();
         if (worker_.joinable()) {
             worker_.join();
         }
     }
 
-    absl::Status run() {
+    std::expected<void, std::string> run() {
         std::string cmd = "rpicam-vid -t 0 --inline --nopreview --width 1280 --height 720 "
                           "--framerate 30 --lores-width 160 --lores-height 120 "
                           "--post-process-file motion_detect.json -o - 2>&1";
 
         FILE* pipe = popen(cmd.c_str(), "r");
-        if (!pipe) return absl::InternalError("Failed to open rpicam-vid pipe");
+        if (!pipe) return std::unexpected("Failed to open rpicam-vid pipe");
         absl::Cleanup closer = [pipe] { pclose(pipe); };
 
         std::cout << "Service started. Monitoring hardware ISP motion signals..." << std::endl;
 
         std::array<char, 64 * 1024> buffer;
-        absl::Time last_motion = absl::UnixEpoch();
+        auto last_motion = std::chrono::steady_clock::now() - 1h;
         bool recording = false;
         std::ofstream out_file;
         std::string current_temp_path;
@@ -145,7 +151,7 @@ public:
             if (bytes_read == 0) break;
 
             std::string_view chunk(buffer.data(), bytes_read);
-            absl::Time now = absl::Now();
+            auto now = std::chrono::steady_clock::now();
 
             if (chunk.find("Motion detected") != std::string::npos) {
                 std::cout << "--- Motion detected signal received ---" << std::endl;
@@ -158,48 +164,51 @@ public:
             if (recording) {
                 out_file.write(buffer.data(), bytes_read);
 
-                if (now - last_motion > absl::Seconds(5) || now - start_time_ > absl::Minutes(5)) {
+                if (now - last_motion > 5s || now - start_time_ > 5min) {
                     stop_recording(recording, out_file, current_temp_path);
                 }
             }
         }
 
-        return absl::OkStatus();
+        return {};
     }
 
 private:
     const std::string temp_dir_;
     const std::string final_dir_;
     std::thread worker_;
-    bool stop_requested_ ABSL_GUARDED_BY(mtx_) = false;
-    absl::Mutex mtx_;
-    std::queue<ConversionTask> tasks_ ABSL_GUARDED_BY(mtx_);
-    absl::Time start_time_;
+    bool stop_requested_;
+    std::mutex mtx_;
+    std::condition_variable cv_;
+    std::queue<ConversionTask> tasks_;
+    std::chrono::steady_clock::time_point start_time_;
 
     void start_recording(bool& recording, std::ofstream& file, std::string& path) {
         recording = true;
-        start_time_ = absl::Now();
-        path = absl::StrFormat("%s/%d.h264", temp_dir_, absl::ToUnixSeconds(start_time_));
+        start_time_ = std::chrono::steady_clock::now();
+        auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        path = std::format("{}/{}.h264", temp_dir_, ts);
         file.open(path, std::ios::binary);
-        std::cout << absl::StrFormat("Recording started: %s\n", path);
+        std::cout << std::format("Recording started: {}\n", path);
     }
 
     void stop_recording(bool& recording, std::ofstream& file, std::string& path) {
         file.close();
         recording = false;
         {
-            absl::MutexLock lock(&mtx_);
-            std::string final_path = absl::StrFormat("%s/%s.mp4", final_dir_, fs::path(path).stem().string());
+            std::lock_guard lock(mtx_);
+            std::string final_path = std::format("{}/{}.mp4", final_dir_, fs::path(path).stem().string());
             tasks_.push({path, final_path});
         }
+        cv_.notify_one();
     }
 
     void process_conversions() {
         while (true) {
             ConversionTask task;
             {
-                absl::MutexLock lock(&mtx_, absl::Condition(
-                    +[](CameraService* s) { return !s->tasks_.empty() || s->stop_requested_; }, this));
+                std::unique_lock lock(mtx_);
+                cv_.wait(lock, [this] { return !tasks_.empty() || stop_requested_; });
 
                 if (stop_requested_ && tasks_.empty()) return;
 
@@ -207,10 +216,10 @@ private:
                 tasks_.pop();
             }
 
-            std::string ffmpeg_cmd = absl::StrFormat("ffmpeg -y -i %s -c copy %s > /dev/null 2>&1", task.src_, task.dest_);
+            std::string ffmpeg_cmd = std::format("ffmpeg -y -i {} -c copy {} > /dev/null 2>&1", task.src_, task.dest_);
             if (std::system(ffmpeg_cmd.c_str()) == 0) {
                 fs::remove(task.src_);
-                std::cout << absl::StrFormat("Finalized conversion: %s\n", task.dest_);
+                std::cout << std::format("Finalized conversion: {}\n", task.dest_);
             }
         }
     }
@@ -222,9 +231,9 @@ int main(int argc, char* argv[]) {
     absl::ParseCommandLine(argc, argv);
 
     CameraService service(absl::GetFlag(FLAGS_temp_dir), absl::GetFlag(FLAGS_final_dir));
-    absl::Status result = service.run();
-    if (!result.ok()) {
-        std::cerr << absl::StrFormat("\nRuntime Error: %s\n", result.ToString());
+    auto result = service.run();
+    if (!result) {
+        std::cerr << std::format("\nRuntime Error: {}\n", result.error());
         print_stack_dump();
         std::exit(1);
     }
