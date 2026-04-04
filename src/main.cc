@@ -1,12 +1,10 @@
 #include <iostream>
 #include <string>
-#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <cstdio>
 #include <array>
 #include <queue>
-#include <atomic>
 #include <thread>
 #include <execinfo.h>
 #include <csignal>
@@ -14,11 +12,10 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/flags/usage.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
-#include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "absl/cleanup/cleanup.h"
 
@@ -221,6 +218,7 @@ private:
 
 int main(int argc, char* argv[]) {
     setup_crash_handler();
+    absl::SetProgramUsageMessage("Camera monitoring and recording service. Monitors hardware ISP motion signals and saves recorded video to MP4.");
     absl::ParseCommandLine(argc, argv);
 
     CameraService service(absl::GetFlag(FLAGS_temp_dir), absl::GetFlag(FLAGS_final_dir));
