@@ -20,6 +20,9 @@ cc_binary(
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/flags:usage",
         "@abseil-cpp//absl/cleanup",
+        # Add these two:
+        "@abseil-cpp//absl/debugging:symbolize",
+        "@abseil-cpp//absl/debugging:failure_signal_handler",
     ],
 )
 
