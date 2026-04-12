@@ -15,6 +15,7 @@ register_toolchains(
 
 # For Bzlmod (MODULE.bazel)
 bazel_dep(name = "abseil-cpp", version = "20240116.2")
+bazel_dep(name = "googletest", version = "1.14.0")
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 git_override(
     module_name = "hedron_compile_commands",
