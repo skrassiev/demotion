@@ -1,4 +1,4 @@
-#include "src/camera_service.h"
+#include "camera_service.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
 #include "absl/flags/flag.h"

@@ -1,5 +1,14 @@
 # Force the use of the hermetic platform when targeting rpi3
 build:rpi3 --platforms=//:rpi3
+build:rpi3 --cpu=aarch64
+
+# Force the compiler to use your existing toolchain logic
+build:rpi3 --crosstool_top=@local_config_cc//:toolchain
 
 # Enable toolchain resolution for C++
-build --incompatible_enable_cc_toolchain_resolution
+#build --incompatible_enable_cc_toolchain_resolution
+
+# Use the specific path to your dnf/apt installed mold binary
+# Use your wrapper script as the linker
+#build --action_env=LD=/usr/local/bin/ld.mold
+#build --linkopt=-fuse-ld=/usr/local/bin/ld.mold

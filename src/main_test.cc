@@ -1,4 +1,4 @@
-#include "src/camera_service.h"
+#include "camera_service.h"
 #include <gtest/gtest.h>
 #include <fstream>
 #include <filesystem>

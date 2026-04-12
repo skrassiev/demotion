@@ -1,4 +1,6 @@
 #include <cmath>
+#include <algorithm>
+#include <iostream>
 
 #include "background_subtractor.h"
 
@@ -7,6 +9,16 @@
 void BackgroundSubtractor::Process(std::span<const uint8_t> frame, std::vector<uint8_t>& motion_map) {
     motion_map.resize(width_ * height_);
     
+    if (!initialized_) {
+        std::cout << "Initializing background model..." << std::endl;
+        for (size_t i = 0; i < frame.size(); ++i) {
+            background_model_[i] = static_cast<float>(frame[i]);
+        }
+        std::fill(motion_map.begin(), motion_map.end(), 0);
+        initialized_ = true;
+        return;
+    }
+
     for (size_t i = 0; i < frame.size(); ++i) {
         float pixel = static_cast<float>(frame[i]);
         
@@ -24,4 +36,3 @@ void BackgroundSubtractor::Process(std::span<const uint8_t> frame, std::vector<u
         }
     }
 }
-

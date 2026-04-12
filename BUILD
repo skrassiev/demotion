@@ -1,17 +1,46 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
+COMMON_COPTS = [
+    "-std=c++2b",
+    "-g",
+    "-fno-omit-frame-pointer",
+    "-fno-optimize-sibling-calls",
+]
+
+COMMON_LINKOPTS = [
+    "-rdynamic",
+    "-lpthread",
+    "-lm",
+]
+
+# Move platform-specific options here
+# This library provides flags that should be applied to performance-critical code
+cc_library(
+    name = "optimized_copts",
+    copts = select({
+        "@platforms//cpu:aarch64": [
+            "-O3",
+            "-march=armv8-a+simd",
+            "-ffast-math",
+        ],
+        "@platforms//cpu:x86_64": [
+            "-O3",
+            "-march=native",
+            "-ffast-math",
+        ],
+        "//conditions:default": ["-O2"],
+    }),
+)
+
 cc_library(
     name = "camera_service_lib",
     srcs = ["src/camera_service.cc"],
     hdrs = ["src/camera_service.h"],
     linkstatic = True,
-    copts = [
-        "-std=c++2b",
-        "-g",
-        "-fno-omit-frame-pointer",
-        "-fno-optimize-sibling-calls",
-    ],
+    copts = COMMON_COPTS,
+    strip_include_prefix = "src",
     deps = [
+        ":optimized_copts",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/cleanup",
     ],
@@ -20,17 +49,8 @@ cc_library(
 cc_binary(
     name = "camera-service",
     srcs = ["src/main.cc"],
-    copts = [
-        "-std=c++2b",
-        "-g",
-        "-fno-omit-frame-pointer",
-        "-fno-optimize-sibling-calls",
-    ], 
-    linkopts = [
-        "-rdynamic",
-        "-lpthread",
-        "-lm",
-    ],
+    copts = COMMON_COPTS, 
+    linkopts = COMMON_LINKOPTS,
     deps = [
         ":camera_service_lib",
         "@abseil-cpp//absl/flags:flag",
@@ -44,7 +64,8 @@ cc_binary(
 cc_test(
     name = "camera-service-test",
     srcs = ["src/main_test.cc"],
-    copts = ["-std=c++2b"],
+    copts = COMMON_COPTS,
+    linkopts = COMMON_LINKOPTS,
     linkstatic = True,
     deps = [
         ":camera_service_lib",
@@ -56,28 +77,17 @@ cc_library(
     name = "background_subtractor_lib",
     srcs = ["src/background_subtractor.cc"],
     hdrs = ["src/background_subtractor.h"],
-    copts = select({
-        "@platforms//cpu:aarch64": [
-            "-std=c++2b",
-            "-O3",
-            "-march=armv8-a+simd", # Enables NEON SIMD
-            "-ffast-math",
-        ],
-        "@platforms//cpu:x86_64": [
-            "-std=c++2b",
-            "-O3",
-            "-march=native",       # Enables AVX2/SSE4 on your dev machine
-            "-ffast-math",
-        ],
-        "//conditions:default": ["-O2"],
-    }),
+    strip_include_prefix = "src",
+    copts = COMMON_COPTS,
     visibility = ["//visibility:public"],
+    deps = [":optimized_copts"],
 )
 
 cc_test(
     name = "background_subtractor_test",
     srcs = ["src/background_subtractor_test.cc"],
-    copts = ["-std=c++2b"],
+    copts = COMMON_COPTS,
+    linkopts = COMMON_LINKOPTS,
     linkstatic = True,
     deps = [
         ":background_subtractor_lib",
@@ -85,11 +95,24 @@ cc_test(
     ],
 )
 
+genrule(
+    name = "debug_sandbox",
+    outs = ["debug_sandbox.txt"],
+    cmd = "find . -maxdepth 5 > $@",
+)
 
 platform(
     name = "rpi3",
     constraint_values = [
         "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+)
+
+platform(
+    name = "x86_64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
 )

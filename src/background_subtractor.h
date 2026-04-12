@@ -16,5 +16,6 @@ public:
 private:
     int width_, height_;
     float alpha_;
+    bool initialized_ = false;
     std::vector<float> background_model_;
 };
