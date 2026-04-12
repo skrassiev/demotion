@@ -1,14 +1,9 @@
-# Force the use of the hermetic platform when targeting rpi3
+# --- Raspberry Pi 3 (Cross-compile via Zig) ---
 build:rpi3 --platforms=//:rpi3
-build:rpi3 --cpu=aarch64
+# Removed crosstool_top to let Toolchain Resolution pick @zig_sdk
 
-# Force the compiler to use your existing toolchain logic
-build:rpi3 --crosstool_top=@local_config_cc//:toolchain
-
-# Enable toolchain resolution for C++
-#build --incompatible_enable_cc_toolchain_resolution
-
-# Use the specific path to your dnf/apt installed mold binary
-# Use your wrapper script as the linker
-#build --action_env=LD=/usr/local/bin/ld.mold
-#build --linkopt=-fuse-ld=/usr/local/bin/ld.mold
+# --- Local Host (Native via System Clang + Mold) ---
+build:x86_64 --platforms=//:x86_64
+build:x86_64 --action_env=CC=clang
+build:x86_64 --action_env=CXX=clang++
+build:x86_64 --linkopt=-fuse-ld=mold
