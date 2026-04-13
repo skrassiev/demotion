@@ -42,7 +42,7 @@ auto print_grid = [width = 16, i = 0](uint8_t val) mutable {
 TEST(BackgroundSubtractorTest, DetectsMotionAndLearns) {
   const int width = 4;
   const int height = 4;
-  BackgroundSubtractor bs(width, height, 0.1f); // Faster learning for test
+  BackgroundSubtractor bs(width, height); // Faster learning for test
 
   // 1. Create a static background
   std::vector<uint8_t> frame(width * height, 100);
@@ -93,7 +93,7 @@ TEST(BackgroundSubtractorTest, IgnoresSlowChanges) {
   const int width = 2;
   const int height = 2;
   // Learning rate 0.1 means it adapts quickly
-  BackgroundSubtractor bs(width, height, 0.1f);
+  BackgroundSubtractor bs(width, height);
 
   std::vector<uint8_t> frame(width * height, 100);
   std::vector<uint8_t> motion_map(width * height);
@@ -115,8 +115,7 @@ TEST(BackgroundSubtractorTest, IgnoresSlowChanges) {
 TEST(BackgroundSubtractorTest, SimulatesSwayingLeaves) {
   const int width = 4;
   const int height = 4;
-  const float alpha = 0.05f;
-  BackgroundSubtractor bs(width, height, alpha);
+  BackgroundSubtractor bs(width, height);
 
   std::vector<uint8_t> frame(width * height, 100);
   std::vector<uint8_t> motion_map(width * height);
@@ -141,9 +140,8 @@ TEST(BackgroundSubtractorTest, SimulatesSwayingLeaves) {
 
     // Because the diff (max 10) is less than the threshold (15),
     // it should not trigger motion.
-    EXPECT_EQ(motion_map[0], 0)
-        << "Swaying leaf triggered motion at frame " << i
-        << " (val: " << (int)swaying_val << ")";
+    EXPECT_EQ(motion_map[0], 0) << "Swaying leaf triggered motion at frame "
+                                << i << " (val: " << (int)swaying_val << ")";
   }
 
   // 3. Verify the background model updated slightly but stayed stable
@@ -157,8 +155,7 @@ TEST(BackgroundSubtractorTest, SimulatesSwayingLeaves) {
 TEST(BackgroundSubtractorTest, SimulatesMovingCar) {
   const int width = 320;
   const int height = 240;
-  const float alpha = 0.05f;
-  BackgroundSubtractor bs(width, height, alpha);
+  BackgroundSubtractor bs(width, height);
 
   // Constants for 75-degree FOV at 30m distance, 25mph speed, 30fps
   // Calculations:
@@ -214,8 +211,7 @@ TEST(BackgroundSubtractorTest, SimulatesMovingCar) {
 TEST(BackgroundSubtractorTest, SimulatesCarStopAndGo) {
   const int width = 320;
   const int height = 240;
-  const float alpha = 0.02f; // Slightly slower learning than default
-  BackgroundSubtractor bs(width, height, alpha);
+  BackgroundSubtractor bs(width, height);
 
   // Constants for 75-degree FOV at 30m distance, 15mph speed, 30fps
   const float speed_px_f = 1.55f;
@@ -297,7 +293,8 @@ TEST(BackgroundSubtractorTest, SimulatesCarStopAndGo) {
 
     bs.Process(frame, motion_map);
 
-    // After several frames, the leading edge of the car should be in a fresh background zone
+    // After several frames, the leading edge of the car should be in a fresh
+    // background zone
     if (f > 20) {
       int edge_x = std::min(width - 1, cur_x + car_w - 1);
       int mid_y = car_y + car_h / 2;
@@ -308,7 +305,9 @@ TEST(BackgroundSubtractorTest, SimulatesCarStopAndGo) {
       int ghost_x = stop_x + 1; // Left edge of where it was
       int ghost_y = car_y + car_h / 2;
       EXPECT_EQ(motion_map[ghost_y * width + ghost_x], 255)
-        << "Ghost (background mismatch) NOT detected at old stop position at frame " << (210 + f);
+          << "Ghost (background mismatch) NOT detected at old stop position at "
+             "frame "
+          << (210 + f);
     }
   }
 }
@@ -316,8 +315,7 @@ TEST(BackgroundSubtractorTest, SimulatesCarStopAndGo) {
 TEST(BackgroundSubtractorTest, SimulatesHumanHeadOn) {
   const int width = 320;
   const int height = 240;
-  const float alpha = 0.05f;
-  BackgroundSubtractor bs(width, height, alpha);
+  BackgroundSubtractor bs(width, height);
 
   // Constants for 75-degree FOV, 320px width
   const float f_px = 160.0f / std::tan(37.5f * M_PI / 180.0f); // ~208.5
@@ -358,25 +356,31 @@ TEST(BackgroundSubtractorTest, SimulatesHumanHeadOn) {
 
     bs.Process(frame, motion_map);
 
-    // Verify detection: look for motion anywhere within the human's projected area.
-    // We check a few sample points, especially near the expanding edges
+    // Verify detection: look for motion anywhere within the human's projected
+    // area. We check a few sample points, especially near the expanding edges
     // which shouldn't be absorbed as quickly as the dead center.
     bool motion_in_human = false;
     // Check center
-    if (motion_map[(y0 + h_px / 2) * width + (x0 + w_px / 2)] == 255) motion_in_human = true;
+    if (motion_map[(y0 + h_px / 2) * width + (x0 + w_px / 2)] == 255)
+      motion_in_human = true;
     // Check top edge
-    if (motion_map[y0 * width + (x0 + w_px / 2)] == 255) motion_in_human = true;
+    if (motion_map[y0 * width + (x0 + w_px / 2)] == 255)
+      motion_in_human = true;
     // Check left edge
-    if (motion_map[(y0 + h_px / 2) * width + x0] == 255) motion_in_human = true;
+    if (motion_map[(y0 + h_px / 2) * width + x0] == 255)
+      motion_in_human = true;
 
     if (motion_in_human) {
-      if (z_m > 18.0f) detected_at_start = true;
-      if (z_m < 5.0f) detected_at_end = true;
+      if (z_m > 18.0f)
+        detected_at_start = true;
+      if (z_m < 5.0f)
+        detected_at_end = true;
     }
 
     // Move closer
     z_m -= speed_m_f;
-    if (z_m < 2.0f) break;
+    if (z_m < 2.0f)
+      break;
   }
 
   EXPECT_TRUE(detected_at_start) << "Human should be detected at 20m";
