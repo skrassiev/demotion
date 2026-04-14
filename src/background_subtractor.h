@@ -13,13 +13,13 @@ public:
     variance_model_.resize(width_ * height_, 100.0f);
   }
 
-  void Process(const uint8_t *frame, size_t size,
-               std::vector<uint8_t> &motion_map) {
+  uint32_t Process(const uint8_t *frame, size_t size,
+                   std::vector<uint8_t> &motion_map) {
     return Process(std::span<const uint8_t>(frame, size), motion_map);
   }
 
-  void Process(std::span<const uint8_t> frame,
-               std::vector<uint8_t> &motion_map);
+  uint32_t Process(std::span<const uint8_t> frame,
+                   std::vector<uint8_t> &motion_map);
 
   template <typename F> void PrintBackground(F print_grid) {
     std::for_each(background_model_.begin(), background_model_.end(),

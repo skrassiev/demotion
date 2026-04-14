@@ -2,8 +2,8 @@
 #include <algorithm>
 #include <cmath>
 
-void BackgroundSubtractor::Process(std::span<const uint8_t> frame,
-                                   std::vector<uint8_t> &motion_map) {
+uint32_t BackgroundSubtractor::Process(std::span<const uint8_t> frame,
+                                       std::vector<uint8_t> &motion_map) {
   motion_map.resize(width_ * height_);
 
   if (!initialized_) {
@@ -11,9 +11,10 @@ void BackgroundSubtractor::Process(std::span<const uint8_t> frame,
       background_model_[i] = static_cast<float>(frame[i]);
     }
     initialized_ = true;
-    return;
+    return 0;
   }
 
+  uint32_t regions = 0;
   for (size_t i = 0; i < frame.size(); ++i) {
     float pixel = static_cast<float>(frame[i]);
     float diff_sq = std::pow(pixel - background_model_[i], 2);
@@ -43,6 +44,9 @@ void BackgroundSubtractor::Process(std::span<const uint8_t> frame,
     if (!is_motion) {
       variance_model_[i] =
           (1.0f - current_alpha) * variance_model_[i] + current_alpha * diff_sq;
+    } else {
+      regions++;
     }
   }
+  return regions;
 }
