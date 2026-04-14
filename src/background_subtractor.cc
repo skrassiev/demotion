@@ -32,7 +32,8 @@ void BackgroundSubtractor::Process(std::span<const uint8_t> frame,
         std::clamp(1.0f / (variance_model_[i] + 1.0f), min_alpha, max_alpha);
 
     // 3. Background and Variance Update
-    // Always update the background model to ensure stationary objects are eventually absorbed.
+    // We update on every frame to ensure stationary objects are eventually
+    // absorbed. The adaptive alpha naturally slows learning in noisy regions.
     background_model_[i] =
         (1.0f - current_alpha) * background_model_[i] + current_alpha * pixel;
 

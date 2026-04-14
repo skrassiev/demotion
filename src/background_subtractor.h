@@ -1,14 +1,21 @@
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
 
 class BackgroundSubtractor {
 public:
-  BackgroundSubtractor(int w, int h) : width_(w), height_(h) {
+  BackgroundSubtractor(int w, int h, float alpha = 0.05f)
+      : width_(w), height_(h) {
     background_model_.resize(width_ * height_, 0.0f);
     // Initialize variance high so the model learns the initial scene quickly
     variance_model_.resize(width_ * height_, 100.0f);
+  }
+
+  void Process(const uint8_t *frame, size_t size,
+               std::vector<uint8_t> &motion_map) {
+    return Process(std::span<const uint8_t>(frame, size), motion_map);
   }
 
   void Process(std::span<const uint8_t> frame,

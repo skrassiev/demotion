@@ -1,3 +1,8 @@
+module(name = "demotion", version = "1.0")
+
+# 1. Import the rule
+git_repo = use_repo_rule("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
+
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
@@ -14,6 +19,10 @@ register_toolchains(
 # For Bzlmod (MODULE.bazel)
 bazel_dep(name = "abseil-cpp", version = "20240116.2")
 bazel_dep(name = "googletest", version = "1.14.0")
+bazel_dep(name = "boost.property_tree", version = "1.83.0")
+bazel_dep(name = "boost.algorithm", version = "1.83.0")
+bazel_dep(name = "boost.program_options", version = "1.83.0")
+bazel_dep(name = "boost.system", version = "1.83.0")
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 git_override(
     module_name = "hedron_compile_commands",
@@ -27,3 +36,33 @@ use_repo(cc_configure, "local_config_cc")
 
 # Register the local toolchain so it can be used for x86_64
 register_toolchains("@local_config_cc//:all")
+
+# Import the git repository rule
+
+use_repo_rule("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
+
+# libcamera_apps shim
+git_repo(
+    name = "libcamera_apps",
+    remote = "https://github.com/raspberrypi/libcamera-apps.git",
+    commit = "2ebb5820566f2efa64d812c6fbceac94d5799f86",
+    build_file_content = """
+cc_library(
+    name = "post_processing_plugin_hdrs",
+    hdrs = glob([
+        "core/*.hpp",
+        "api/**/*.hpp",
+        "post_processing_stages/**/*.hpp",
+        "post_processing_stages/**/*.h",
+    ]),
+    includes = [".", "core", "api"],
+    deps = [
+        "@boost.property_tree",
+        "@boost.algorithm",
+        "@boost.program_options",
+        "@boost.system",
+    ],
+    visibility = ["//visibility:public"],
+)
+""",
+)
