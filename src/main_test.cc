@@ -81,3 +81,58 @@ TEST_F(CameraServiceTest, FinalPathHasCorrectFormat) {
     fs::path daily_dir = fs::path(final_dir) / date_buf;
     EXPECT_TRUE(fs::exists(daily_dir));
 }
+
+TEST_F(CameraServiceTest, DiscardShortMotion) {
+    // Set min duration to 1.0 second
+    CameraService service(temp_dir, final_dir, "test.json", 1.0);
+    
+    bool recording = false;
+    std::ofstream out_file;
+    std::string current_temp_path;
+
+    service.start_recording(recording, out_file, current_temp_path);
+    ASSERT_TRUE(fs::exists(current_temp_path));
+    
+    // Stop almost immediately (duration < 1.0s)
+    service.stop_recording(recording, out_file, current_temp_path);
+    
+    // Check if path was deleted
+    EXPECT_FALSE(fs::exists(current_temp_path));
+}
+
+TEST_F(CameraServiceTest, KeepLongMotion) {
+    // Set min duration to 0.1 second
+    CameraService service(temp_dir, final_dir, "test.json", 0.1);
+    
+    bool recording = false;
+    std::ofstream out_file;
+    std::string current_temp_path;
+
+    service.start_recording(recording, out_file, current_temp_path);
+    ASSERT_TRUE(fs::exists(current_temp_path));
+    
+    // Wait longer than 0.1s
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    
+    service.stop_recording(recording, out_file, current_temp_path);
+    
+    // Path should still exist immediately after stop_recording (it's added to tasks_)
+    // OR it might be gone if process_conversions already picked it up.
+    // But it definitely SHOULD have been added to the queue, not deleted by stop_recording.
+    
+    // We can check if the final directory has something (eventually)
+    // or just check that it WAS NOT deleted by stop_recording if we are fast enough.
+    // More reliably: check if the date directory was created.
+    
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm local_tm;
+    localtime_r(&t, &local_tm);
+    char date_buf[32];
+    std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", &local_tm);
+    
+    fs::path daily_dir = fs::path(final_dir) / date_buf;
+    // Wait a bit for ffmpeg to potentially create the file (though ffmpeg might fail in test env)
+    // The directory is created in stop_recording BEFORE pushing to tasks_.
+    EXPECT_TRUE(fs::exists(daily_dir));
+}

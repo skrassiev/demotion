@@ -15,7 +15,8 @@ int main(int argc, char* argv[]) {
 
     CameraService service(absl::GetFlag(FLAGS_temp_dir), 
                           absl::GetFlag(FLAGS_final_dir),
-                          absl::GetFlag(FLAGS_motion_detect_file));
+                          absl::GetFlag(FLAGS_motion_detect_file),
+                          absl::GetFlag(FLAGS_min_motion_duration));
     try {
         auto result = service.run();
         if (!result) {
