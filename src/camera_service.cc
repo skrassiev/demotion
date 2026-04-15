@@ -57,7 +57,7 @@ std::expected<void, std::string> CameraService::run() {
     std::string cmd = std::format(
         "rpicam-vid -t 0 --inline --nopreview --width=1280 --height=720 "
         "--framerate=30 --lores-width=160 --lores-height=120 "
-        "--bitrate=1200000 "
+        "--bitrate=400000 "
         "--lens-position=0.04 --autofocus-mode=manual "
         "--post-process-file={} -o - 2>&1", 
         motion_detect_file_);
