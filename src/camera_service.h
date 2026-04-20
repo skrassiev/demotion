@@ -56,6 +56,8 @@ private:
   std::queue<ConversionTask> tasks_;
   std::chrono::steady_clock::time_point start_time_;
   std::chrono::system_clock::time_point wall_start_time_;
+  std::vector<uint8_t> cached_sps_pps_;
+  bool has_sps_pps_ = false;
 };
 
 void Log(std::string_view msg, bool is_error = false);
