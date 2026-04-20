@@ -47,7 +47,7 @@ public:
     auto regions = subtractor_->Process(buffer, motion_map_);
     bool motion_detected = regions > 0;
 
-    completed_request->post_process_metadata.Set("motion_detect.result",
+    completed_request->post_process_metadata.Set("motion_detector.result",
                                                  regions);
     if (config_.verbose && motion_detected != motion_detected_) {
       LOG(1, "Motion " << (motion_detected ? "detected" : "stopped"));
@@ -92,4 +92,8 @@ static PostProcessingStage *create_stage(RPiCamApp *app) {
   return new MotionPlugin(app);
 }
 
-static RegisterStage r("motion_detect", create_stage);
+static RegisterStage r("motion_detector", create_stage);
+
+extern "C" PostProcessingStage *create_motion_detector(RPiCamApp *app) {
+  return new MotionPlugin(app);
+}
