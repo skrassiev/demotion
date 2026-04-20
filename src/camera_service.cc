@@ -115,7 +115,61 @@ std::expected<void, std::string> CameraService::run() {
       stop_time_deadline = now + post_delay;
     }
 
-    // 2. Data Writing Logic
+    // 1.5 Scan for SPS/PPS if not yet found
+    if (!has_sps_pps_) {
+      for (size_t i = 0; i + 5 < bytes_read; ++i) {
+        if (buffer[i] == 0 && buffer[i + 1] == 0 && buffer[i + 2] == 0 &&
+            buffer[i + 3] == 1) {
+          uint8_t nalu_type = buffer[i + 4] & 0x1F;
+          if (nalu_type == 7) { // SPS found
+            // Look for PPS (type 8) nearby, or just capture a chunk
+            // For simplicity, we'll capture until the next IDR or just a fixed
+            // size
+            // Realistically, SPS/PPS are small. We'll look for the next NAL
+            // after PPS.
+            Log("Found SPS/PPS header. Analyzing...");
+            uint8_t profile_idc = buffer[i + 5];
+            uint8_t level_idc = buffer[i + 7];
+            std::string profile_name = "Unknown";
+            if (profile_idc == 66)
+              profile_name = "Baseline";
+            else if (profile_idc == 77)
+              profile_name = "Main";
+            else if (profile_idc == 100)
+              profile_name = "High";
+
+            Log(std::format("H.264 Stream Info: Profile {} ({}), Level {:.1f}",
+                           profile_idc, profile_name, level_idc / 10.0));
+
+            // Capture SPS + PPS. Usually they are consecutive.
+            // We'll search for the next NAL after SPS that isn't PPS, or just
+            // grab both.
+            size_t start = i;
+            size_t end = i + 5;
+            bool found_pps = false;
+            while (end + 4 < bytes_read) {
+              if (buffer[end] == 0 && buffer[end + 1] == 0 &&
+                  buffer[end + 2] == 0 && buffer[end + 3] == 1) {
+                uint8_t next_type = buffer[end + 4] & 0x1F;
+                if (next_type == 8) {
+                  found_pps = true;
+                } else if (found_pps && next_type != 8) {
+                  break; // Found something else after PPS
+                }
+              }
+              end++;
+            }
+            cached_sps_pps_.assign(buffer.begin() + start,
+                                   buffer.begin() + end);
+            has_sps_pps_ = true;
+            Log(std::format("Cached {} bytes of SPS/PPS header",
+                           cached_sps_pps_.size()));
+            break;
+          }
+        }
+      }
+    }
+
     if (recording) {
       if (out_file.is_open()) {
         out_file.write(buffer.data(), bytes_read);
@@ -150,6 +204,12 @@ void CameraService::start_recording(bool &recording, std::ofstream &file,
     return;
   }
   Log(std::format("Recording started: {}\n", path));
+
+  if (has_sps_pps_) {
+    file.write(reinterpret_cast<const char *>(cached_sps_pps_.data()),
+               cached_sps_pps_.size());
+    Log("Prepended cached SPS/PPS header to recording");
+  }
 }
 
 void CameraService::stop_recording(bool &recording, std::ofstream &file,
@@ -211,11 +271,13 @@ void CameraService::process_conversions() {
     std::string ffmpeg_cmd = std::format(
         "ffmpeg -y -i {} -c copy {} > /dev/null 2>&1", task.src_, task.dest_);
     int status = std::system(ffmpeg_cmd.c_str());
+    bool ffmpeg_success = false;
 
     if (WIFEXITED(status)) {
       int exit_code = WEXITSTATUS(status);
       if (exit_code == 0) {
         Log(std::format("Finalized conversion: {}\n", task.dest_));
+        ffmpeg_success = true;
       } else {
         Log(std::format("FFmpeg exited with error code {} for task: {}\n",
                         exit_code, task.src_),
@@ -232,12 +294,14 @@ void CameraService::process_conversions() {
     }
 
     std::error_code ec;
-    if (fs::remove(task.src_, ec)) {
-      // File removed
-    } else if (ec) {
-      Log(std::format("Failed to remove temporary file {}: {}\n", task.src_,
-                      ec.message()),
-          true);
+    if (ffmpeg_success) {
+      if (fs::remove(task.src_, ec)) {
+        // File removed
+      } else if (ec) {
+        Log(std::format("Failed to remove temporary file {}: {}\n", task.src_,
+                        ec.message()),
+            true);
+      }
     }
   }
 }
