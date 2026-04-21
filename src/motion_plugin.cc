@@ -11,13 +11,15 @@ using Stream = libcamera::Stream;
 
 class MotionPlugin : public PostProcessingStage {
 public:
+  static constexpr std::string_view stage_name_ = "mog2_detect";
+
   MotionPlugin(RPiCamApp *app) : PostProcessingStage(app) {
     // Initialize with fixed dimensions; can be updated via Read()
     subtractor_ = std::make_unique<BackgroundSubtractor>(320, 240, 0.05f);
     LOG(1, "MOG2 Motion::New");
   }
 
-  char const *Name() const override { return "mog2_detect"; }
+  char const *Name() const override { return stage_name_.data(); }
 
   virtual void Read(boost::property_tree::ptree const &params) override {
     // Optional: read parameters from JSON
@@ -92,8 +94,4 @@ static PostProcessingStage *create_stage(RPiCamApp *app) {
   return new MotionPlugin(app);
 }
 
-static RegisterStage r("motion_detector", create_stage);
-
-extern "C" PostProcessingStage *create_motion_detector(RPiCamApp *app) {
-  return new MotionPlugin(app);
-}
+static RegisterStage r(MotionPlugin::stage_name_.data(), create_stage);
