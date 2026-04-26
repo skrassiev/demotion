@@ -33,6 +33,10 @@ public:
     // 2. Wrap in std::span
     // 3. subtractor_->Process(...)	if (!stream_)
     LOG(1, "MOG2 Motion::Process");
+    LOG(1, "Sequence: " << completed_request->sequence);
+    LOG(1, "Framerate: " << completed_request->framerate);
+    LOG(1, "Buffers: " << completed_request->buffers.size());
+    LOG(1, "Libcamera Metadata: " << completed_request->metadata.size() << " entries");
 
     if (config_.frame_period &&
         completed_request->sequence % config_.frame_period)
