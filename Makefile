@@ -3,7 +3,7 @@
 # Uses system-installed libcamera and assumes rpicam-apps headers are available.
 
 CXX = g++
-CXXFLAGS = -std=c++2b -fPIC -O3 -Wall
+CXXFLAGS = -std=c++2b -fPIC -O3 -Wall -march=armv8-a+crc -mcpu=cortex-a53 -mtune=cortex-a53 -ffast-math
 
 # libcamera dependencies
 LIBCAMERA_CFLAGS := $(shell pkg-config --cflags libcamera 2>/dev/null || echo -I/usr/include/libcamera)
