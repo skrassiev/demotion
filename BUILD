@@ -20,7 +20,9 @@ cc_library(
     copts = select({
         "@platforms//cpu:aarch64": [
             "-O3",
-            "-march=armv8-a+simd",
+            "-march=armv8-a+crc",
+            "-mcpu=cortex-a53",
+            "-mtune=cortex-a53",
             "-ffast-math",
         ],
         "@platforms//cpu:x86_64": [
@@ -89,16 +91,60 @@ cc_test(
     srcs = ["src/background_subtractor_test.cc"],
     copts = COMMON_COPTS,
     linkopts = COMMON_LINKOPTS,
+    linkstatic = True,
+    data = glob(["testdata/**"]),
     deps = [
         ":background_subtractor_lib",
         "@googletest//:gtest_main",
     ],
 )
 
+# In your BUILD file
+cc_binary(
+    name = "motion_plugin.so",
+    srcs = ["src/motion_plugin.cc"],
+    linkshared = True,
+    copts = [
+        "-std=c++2b",
+        "-fPIC",
+    ],
+    deps = [
+        ":background_subtractor_lib",
+        ":hermetic_libcamera",
+        "@libcamera_apps//:post_processing_plugin_hdrs",
+    ],
+)
+
+cc_library(
+    name = "hermetic_libcamera",
+    srcs = select({
+        ":rpi3_config": [
+            "third_party/libcamera/usr/lib/aarch64-linux-gnu/libcamera.so",
+            "third_party/libcamera/usr/lib/aarch64-linux-gnu/libcamera.so.0.7",
+            "third_party/libcamera/usr/lib/aarch64-linux-gnu/libcamera.so.0.7.0",
+            "third_party/libcamera/usr/lib/aarch64-linux-gnu/libcamera-base.so",
+            "third_party/libcamera/usr/lib/aarch64-linux-gnu/libcamera-base.so.0.7",
+            "third_party/libcamera/usr/lib/aarch64-linux-gnu/libcamera-base.so.0.7.0",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = glob(["third_party/libcamera/usr/include/libcamera/libcamera/**/*.h"]),
+    includes = ["third_party/libcamera/usr/include/libcamera"],
+    visibility = ["//visibility:public"],
+)
+
 genrule(
     name = "debug_sandbox",
     outs = ["debug_sandbox.txt"],
     cmd = "find . -maxdepth 5 > $@",
+)
+
+config_setting(
+    name = "rpi3_config",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
 )
 
 platform(

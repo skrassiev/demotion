@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <print>
 #include <vector>
@@ -9,31 +11,26 @@
 
 namespace {
 
+void print_matrix(std::string_view label, std::span<const uint8_t> data,
+                  int width, int height, int stride = 1) {
+  if (!label.empty()) {
+    std::println("\n--- {} ---", label);
+  }
+  for (int y = 0; y < height; y += stride) {
+    for (int x = 0; x < width; x += stride) {
+      std::print("{}", (data[y * width + x] > 0 ? '#' : '.'));
+    }
+    std::println("");
+  }
+}
+
 auto print_if_motion = [](const std::vector<uint8_t> &map, int width,
                           int height) {
   bool has_motion =
       std::any_of(map.begin(), map.end(), [](uint8_t val) { return val > 0; });
 
   if (has_motion) {
-    std::println("--- Motion Detected! Mapping Grid ---");
-    for (int y = 0; y < height; y += 4) { // Sample every 4th row to save logs
-      for (int x = 0; x < width; x += 4) {
-        std::print("{}", (map[y * width + x] > 0 ? '#' : '.'));
-      }
-      std::println("");
-    }
-  }
-};
-
-// The printing lambda
-auto print_grid = [width = 16, i = 0](uint8_t val) mutable {
-  // Print the pixel
-  std::print("{}", (val > 0 ? '#' : '.'));
-  std::print("{}", val);
-
-  // Check if we hit the end of a row
-  if (++i % width == 0) {
-    std::println("");
+    print_matrix("Motion Detected! Mapping Grid", map, width, height, 4);
   }
 };
 
@@ -50,26 +47,33 @@ TEST(BackgroundSubtractorTest, DetectsMotionAndLearns) {
 
   std::println("Frame.size: {}, motion_map.size: {}", frame.size(),
                motion_map.size());
-  std::println("\nInitial Frame:");
-  std::for_each(frame.begin(), frame.end(), print_grid);
-  std::println("\nInitial Motion Map:");
-  std::for_each(motion_map.begin(), motion_map.end(), print_grid);
+
+  print_matrix("Initial Frame", frame, width, height);
+  print_matrix("Initial Motion Map", motion_map, width, height);
+
   std::println("\nInitial Background:");
-  bs.PrintBackground(print_grid);
+  bs.PrintBackground([i = 0](float val) mutable {
+    std::print("{}", (val > 0.5f ? '#' : '.'));
+    if (++i % width == 0)
+      std::println("");
+  });
 
   // Initial pass: Algorithm should see "no motion" and learn the background
   bs.Process(frame, motion_map);
-  std::println("\nMotion Map:");
-  std::for_each(motion_map.begin(), motion_map.end(), print_grid);
+  print_matrix("Motion Map", motion_map, width, height);
+
   std::println("\nBackground:");
-  bs.PrintBackground(print_grid);
+  bs.PrintBackground([i = 0](float val) mutable {
+    std::print("{}", (val > 0.5f ? '#' : '.'));
+    if (++i % width == 0)
+      std::println("");
+  });
+
   for (auto val : motion_map) {
     EXPECT_EQ(val, 0); // Background is initialized; everything is static
   }
 
-  std::println("\nLearned background:");
-  std::for_each(frame.begin(), frame.end(), print_grid);
-  std::println();
+  print_matrix("Learned background", frame, width, height);
 
   // Run for a few frames to learn the background
   for (int i = 0; i < 10; ++i) {
@@ -385,4 +389,62 @@ TEST(BackgroundSubtractorTest, SimulatesHumanHeadOn) {
 
   EXPECT_TRUE(detected_at_start) << "Human should be detected at 20m";
   EXPECT_TRUE(detected_at_end) << "Human should be detected at 5m";
+}
+
+TEST(BackgroundSubtractorTest, RealWorldData) {
+  const int width = 320;
+  const int height = 240;
+  const size_t y_plane_size = width * height;
+  BackgroundSubtractor bs(width, height);
+
+  std::vector<uint8_t> y_plane(y_plane_size);
+  std::vector<uint8_t> motion_map(y_plane_size);
+
+  std::string testdata_dir = "testdata/by_frame";
+
+  // Bazel test sandbox path handling
+  if (!std::filesystem::exists(testdata_dir)) {
+    // Try to find it relative to the workspace root if run via bazel
+    char *srcdir = std::getenv("TEST_SRCDIR");
+    char *workspace = std::getenv("TEST_WORKSPACE");
+    if (srcdir && workspace) {
+      testdata_dir =
+          std::string(srcdir) + "/" + workspace + "/testdata/by_frame";
+    }
+  }
+
+  ASSERT_TRUE(std::filesystem::exists(testdata_dir))
+      << "Testdata directory not found: " << testdata_dir;
+
+  std::vector<std::filesystem::path> frames;
+  for (const auto &entry : std::filesystem::directory_iterator(testdata_dir)) {
+    if (entry.path().extension() == ".yuv") {
+      frames.push_back(entry.path());
+    }
+  }
+  std::sort(frames.begin(), frames.end());
+
+  ASSERT_FALSE(frames.empty()) << "No YUV frames found in " << testdata_dir;
+
+  std::println("\n--- Processing Real World Data ({} frames) ---",
+               frames.size());
+
+  for (const auto &frame_path : frames) {
+    std::ifstream ifs(frame_path, std::ios::binary);
+    ASSERT_TRUE(ifs.is_open()) << "Failed to open " << frame_path;
+
+    ifs.read(reinterpret_cast<char *>(y_plane.data()), y_plane_size);
+    ASSERT_EQ(ifs.gcount(), y_plane_size)
+        << "Failed to read full Y plane from " << frame_path;
+
+    uint32_t motion_regions = bs.Process(y_plane, motion_map);
+
+    std::println("Frame: {}, Motion Regions: {}",
+                 frame_path.filename().string(), motion_regions);
+
+    // Optional: print a small grid if motion is high
+    if (motion_regions > 100) {
+      print_if_motion(motion_map, width, height);
+    }
+  }
 }
