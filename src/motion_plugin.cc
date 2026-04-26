@@ -36,7 +36,8 @@ public:
     LOG(1, "Sequence: " << completed_request->sequence);
     LOG(1, "Framerate: " << completed_request->framerate);
     LOG(1, "Buffers: " << completed_request->buffers.size());
-    LOG(1, "Libcamera Metadata: " << completed_request->metadata.size() << " entries");
+    LOG(1, "Libcamera Metadata: " << completed_request->metadata.size()
+                                  << " entries");
 
     if (config_.frame_period &&
         completed_request->sequence % config_.frame_period)
@@ -44,7 +45,6 @@ public:
 
     BufferReadSync r(app_, completed_request->buffers[stream_]);
     libcamera::Span<uint8_t> buffer = r.Get()[0];
-    uint8_t *image = buffer.data();
 
     // We need to protect access to first_time_, previous_frame_ and
     // motion_detected_.

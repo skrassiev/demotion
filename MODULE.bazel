@@ -17,7 +17,7 @@ register_toolchains(
 )
 
 # For Bzlmod (MODULE.bazel)
-bazel_dep(name = "abseil-cpp", version = "20240116.2")
+bazel_dep(name = "abseil-cpp", version = "20260107.1")
 bazel_dep(name = "googletest", version = "1.14.0")
 bazel_dep(name = "boost.property_tree", version = "1.83.0")
 bazel_dep(name = "boost.algorithm", version = "1.83.0")

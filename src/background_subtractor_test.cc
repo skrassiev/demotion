@@ -24,20 +24,6 @@ void print_matrix(std::string_view label, std::span<const uint8_t> data,
   }
 }
 
-void print_matrix(std::string_view label, std::span<const float> data,
-                  int width, int height, int stride = 1) {
-  if (!label.empty()) {
-    std::println("\n--- {} ---", label);
-  }
-  for (int y = 0; y < height; y += stride) {
-    for (int x = 0; x < width; x += stride) {
-      // For background models, anything above 0 is "something"
-      std::print("{}", (data[y * width + x] > 0.5f ? '#' : '.'));
-    }
-    std::println();
-  }
-}
-
 auto print_if_motion = [](const std::vector<uint8_t> &map, int width,
                           int height) {
   bool has_motion =
@@ -66,7 +52,7 @@ TEST(BackgroundSubtractorTest, DetectsMotionAndLearns) {
   print_matrix("Initial Motion Map", motion_map, width, height);
 
   std::println("\nInitial Background:");
-  bs.PrintBackground([width, i = 0](float val) mutable {
+  bs.PrintBackground([i = 0](float val) mutable {
     std::print("{}", (val > 0.5f ? '#' : '.'));
     if (++i % width == 0)
       std::println();
@@ -77,7 +63,7 @@ TEST(BackgroundSubtractorTest, DetectsMotionAndLearns) {
   print_matrix("Motion Map", motion_map, width, height);
 
   std::println("\nBackground:");
-  bs.PrintBackground([width, i = 0](float val) mutable {
+  bs.PrintBackground([i = 0](float val) mutable {
     std::print("{}", (val > 0.5f ? '#' : '.'));
     if (++i % width == 0)
       std::println();
@@ -414,7 +400,7 @@ TEST(BackgroundSubtractorTest, RealWorldData) {
   std::vector<uint8_t> y_plane(y_plane_size);
   std::vector<uint8_t> motion_map(y_plane_size);
 
-  std::string testdata_dir = "testdata/by_frame_new";
+  std::string testdata_dir = "testdata/by_frame";
 
   // Bazel test sandbox path handling
   if (!std::filesystem::exists(testdata_dir)) {
