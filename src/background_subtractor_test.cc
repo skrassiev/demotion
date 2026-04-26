@@ -20,7 +20,7 @@ void print_matrix(std::string_view label, std::span<const uint8_t> data,
     for (int x = 0; x < width; x += stride) {
       std::print("{}", (data[y * width + x] > 0 ? '#' : '.'));
     }
-    std::println();
+    std::println("");
   }
 }
 
@@ -55,7 +55,7 @@ TEST(BackgroundSubtractorTest, DetectsMotionAndLearns) {
   bs.PrintBackground([i = 0](float val) mutable {
     std::print("{}", (val > 0.5f ? '#' : '.'));
     if (++i % width == 0)
-      std::println();
+      std::println("");
   });
 
   // Initial pass: Algorithm should see "no motion" and learn the background
@@ -66,7 +66,7 @@ TEST(BackgroundSubtractorTest, DetectsMotionAndLearns) {
   bs.PrintBackground([i = 0](float val) mutable {
     std::print("{}", (val > 0.5f ? '#' : '.'));
     if (++i % width == 0)
-      std::println();
+      std::println("");
   });
 
   for (auto val : motion_map) {
