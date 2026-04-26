@@ -38,7 +38,6 @@ cc_library(
     name = "camera_service_lib",
     srcs = ["src/camera_service.cc"],
     hdrs = ["src/camera_service.h"],
-    linkstatic = True,
     copts = COMMON_COPTS,
     strip_include_prefix = "src",
     deps = [
@@ -52,7 +51,10 @@ cc_binary(
     name = "camera-service",
     srcs = ["src/main.cc"],
     copts = COMMON_COPTS, 
-    linkopts = COMMON_LINKOPTS,
+    linkopts = COMMON_LINKOPTS + select({
+        ":is_rpi3": ["-static"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":camera_service_lib",
         "@abseil-cpp//absl/flags:flag",
@@ -68,7 +70,6 @@ cc_test(
     srcs = ["src/main_test.cc"],
     copts = COMMON_COPTS,
     linkopts = COMMON_LINKOPTS,
-    linkstatic = True,
     deps = [
         ":camera_service_lib",
         "@googletest//:gtest_main",
@@ -148,6 +149,14 @@ config_setting(
 
 platform(
     name = "rpi3",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+)
+
+config_setting(
+    name = "is_rpi3",
     constraint_values = [
         "@platforms//cpu:aarch64",
         "@platforms//os:linux",
