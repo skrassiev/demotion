@@ -17,14 +17,14 @@ uint32_t BackgroundSubtractor::Process(std::span<const uint8_t> frame,
   uint32_t regions = 0;
   for (size_t i = 0; i < frame.size(); ++i) {
     float pixel = static_cast<float>(frame[i]);
-    float diff_sq = std::pow(pixel - background_model_[i], 2);
+    float diff = pixel - background_model_[i];
+    float diff_sq = diff * diff;
 
     // 1. Adaptive Thresholding
     // Use the pixel's variance to determine if a change is "motion"
     // vs "noise" (like swaying leaves).
-    float std_dev = std::sqrt(variance_model_[i]);
-    bool is_motion = diff_sq > std::pow(3.0f * std_dev, 2) &&
-                     diff_sq > 225.0f; // > 3 sigma AND > 15 diff
+    bool is_motion =
+        (diff_sq > (9.0f * variance_model_[i])) && (diff_sq > 225.0f);
     motion_map[i] = is_motion ? 255 : 0;
 
     // 2. Adaptive Learning Rate

@@ -20,7 +20,9 @@ cc_library(
     copts = select({
         "@platforms//cpu:aarch64": [
             "-O3",
-            "-march=armv8-a+simd",
+            "-march=armv8-a+crc",
+            "-mcpu=cortex-a53",
+            "-mtune=cortex-a53",
             "-ffast-math",
         ],
         "@platforms//cpu:x86_64": [
