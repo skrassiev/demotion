@@ -89,6 +89,7 @@ cc_test(
     copts = COMMON_COPTS,
     linkopts = COMMON_LINKOPTS,
     linkstatic = True,
+    data = glob(["testdata/**"]),
     deps = [
         ":background_subtractor_lib",
         "@googletest//:gtest_main",
