@@ -1,0 +1,11 @@
+{
+  "mog2_detect": 
+    {
+      "options": {
+        "alpha": 0.05,
+        "threshold": 15.0,
+        "verbose": 0
+      },
+      "verbose": 0
+    }
+}
