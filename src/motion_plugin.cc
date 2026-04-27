@@ -9,6 +9,11 @@ struct Options {
 
 using Stream = libcamera::Stream;
 
+void print_ptree(const boost::property_tree::ptree &pt) {
+  // This writes the tree to std::cout in a pretty-printed JSON format
+  boost::property_tree::write_json(std::cout, pt);
+}
+
 class MotionPlugin : public PostProcessingStage {
 public:
   static constexpr std::string_view stage_name_ = "mog2_detect";
@@ -23,9 +28,12 @@ public:
 
   virtual void Read(boost::property_tree::ptree const &params) override {
     // Optional: read parameters from JSON
-    LOG(1, "MOG2 Motion::Read");
+    LOG(1, "MOG2 Motion::Read params.vebose=" << params.get<bool>("verbose",
+                                                                  false));
+    print_ptree(params);
     config_.frame_period = params.get<int>("frame_period", 5);
     config_.verbose = params.get<bool>("verbose", false);
+    LOG(1, "MOG2 Motion::Read verbose=" << config_.verbose);
   }
 
   virtual bool Process(CompletedRequestPtr &completed_request) override {
@@ -38,7 +46,6 @@ public:
     LOG(1, "Buffers: " << completed_request->buffers.size());
     LOG(1, "Libcamera Metadata: " << completed_request->metadata.size()
                                   << " entries");
-
     if (config_.frame_period &&
         completed_request->sequence % config_.frame_period)
       return false;
@@ -50,7 +57,8 @@ public:
     // motion_detected_.
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto regions = subtractor_->Process(buffer, motion_map_);
+    auto regions =
+        subtractor_->Process(buffer.subspan(0, frame_size_), motion_map_);
     bool motion_detected = regions > 0;
 
     completed_request->post_process_metadata.Set("motion_detector.result",
@@ -69,9 +77,11 @@ public:
     stream_ = app_->LoresStream(&info);
     if (!stream_)
       return;
+    LOG(1, "MOG2 Motion::Configure: " << info.width << " " << info.height);
     subtractor_ =
         std::make_unique<BackgroundSubtractor>(info.width, info.height, 0.05f);
-    motion_map_.resize(info.width * info.height);
+    frame_size_ = info.width * info.height;
+    motion_map_.resize(frame_size_);
   }
 
 private:
@@ -92,6 +102,7 @@ private:
   std::mutex mutex_;
   bool motion_detected_ = false;
   std::vector<uint8_t> motion_map_;
+  uint16_t frame_size_;
 };
 
 static PostProcessingStage *create_stage(RPiCamApp *app) {
