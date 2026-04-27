@@ -4,8 +4,14 @@ struct Options {
 };
 #include "core/rpicam_app.hpp"
 #include "post_processing_stages/post_processing_stage.hpp"
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <fstream>
 #include <libcamera/stream.h>
 #include <memory>
+#include <mutex>
+#include <span>
+#include <vector>
 
 using Stream = libcamera::Stream;
 
@@ -40,12 +46,11 @@ public:
     // 1. Get image from completed_request
     // 2. Wrap in std::span
     // 3. subtractor_->Process(...)	if (!stream_)
-    LOG(1, "MOG2 Motion::Process");
-    LOG(1, "Sequence: " << completed_request->sequence);
-    LOG(1, "Framerate: " << completed_request->framerate);
-    LOG(1, "Buffers: " << completed_request->buffers.size());
-    LOG(1, "Libcamera Metadata: " << completed_request->metadata.size()
-                                  << " entries");
+    // LOG(1, "MOG2 Motion::Process");
+    // LOG(1, "Framerate: " << completed_request->framerate);
+    // LOG(1, "Buffers: " << completed_request->buffers.size());
+    // LOG(1, "Libcamera Metadata: " << completed_request->metadata.size()
+    //                               << " entries");
     if (config_.frame_period &&
         completed_request->sequence % config_.frame_period)
       return false;
@@ -63,6 +68,15 @@ public:
 
     completed_request->post_process_metadata.Set("motion_detector.result",
                                                  regions);
+    if (!debug_file_.is_open()) {
+      debug_file_.open("motion_debug.bin", std::ios::binary);
+    }
+    if (debug_file_.is_open()) {
+      debug_file_.write(reinterpret_cast<const char *>(buffer.data()),
+                        buffer.size());
+      debug_file_.flush();
+    }
+
     if (config_.verbose && motion_detected != motion_detected_) {
       LOG(1, "Motion " << (motion_detected ? "detected" : "stopped"));
     }
@@ -103,6 +117,7 @@ private:
   bool motion_detected_ = false;
   std::vector<uint8_t> motion_map_;
   uint16_t frame_size_;
+  std::ofstream debug_file_;
 };
 
 static PostProcessingStage *create_stage(RPiCamApp *app) {
