@@ -1,32 +1,35 @@
-#include "camera_service.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/usage.h"
+#include "camera_service.h"
 
-int main(int argc, char* argv[]) {
-    absl::InitializeSymbolizer(argv[0]);
-    absl::FailureSignalHandlerOptions options;
-    absl::InstallFailureSignalHandler(options);
-    
-    absl::SetProgramUsageMessage("Camera monitoring and recording service. Monitors hardware ISP motion signals and saves recorded video to MP4.");
-    absl::ParseCommandLine(argc, argv);
+int main(int argc, char *argv[]) {
+  absl::InitializeSymbolizer(argv[0]);
+  absl::FailureSignalHandlerOptions options;
+  absl::InstallFailureSignalHandler(options);
 
-    CameraService service(absl::GetFlag(FLAGS_temp_dir), 
-                          absl::GetFlag(FLAGS_final_dir),
-                          absl::GetFlag(FLAGS_motion_detect_file),
-                          absl::GetFlag(FLAGS_min_motion_duration));
-    try {
-        auto result = service.run();
-        if (!result) {
-            Log(std::format("\nRuntime Error: {}\n", result.error()), true);
-            std::exit(1);
-        }
-    } catch (const std::exception& e) {
-        Log(std::format("Uncaught exception: {}\n", e.what()), true);
-        throw;
+  absl::SetProgramUsageMessage(
+      "Camera monitoring and recording service. Monitors hardware ISP motion "
+      "signals and saves recorded video to MP4.");
+  absl::ParseCommandLine(argc, argv);
+
+  CameraService service(absl::GetFlag(FLAGS_temp_dir),
+                        absl::GetFlag(FLAGS_final_dir),
+                        absl::GetFlag(FLAGS_motion_detect_file),
+                        absl::GetFlag(FLAGS_min_motion_duration),
+                        absl::GetFlag(FLAGS_post_process_libs));
+  try {
+    auto result = service.run();
+    if (!result) {
+      Log(std::format("\nRuntime Error: {}\n", result.error()), true);
+      std::exit(1);
     }
+  } catch (const std::exception &e) {
+    Log(std::format("Uncaught exception: {}\n", e.what()), true);
+    throw;
+  }
 
-    return 0;
+  return 0;
 }

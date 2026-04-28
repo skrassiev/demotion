@@ -12,6 +12,8 @@ ABSL_FLAG(std::string, final_dir, "/street",
           "Directory for finalized MP4 videos");
 ABSL_FLAG(std::string, motion_detect_file, "motion_detect.json",
           "Path to motion_detect.json post-process file");
+ABSL_FLAG(std::string, post_process_libs, "",
+          "Directory to load post process plugins from. Default is empty.");
 ABSL_FLAG(bool, log_timestamps, true, "Include timestamps in log messages");
 ABSL_FLAG(double, min_motion_duration, 1.0,
           "Minimum duration of motion to record (seconds). Shorter motion will "
@@ -45,10 +47,12 @@ void Log(std::string_view msg, bool is_error) {
 
 CameraService::CameraService(std::string temp_dir, std::string final_dir,
                              std::string motion_detect_file,
-                             double min_motion_duration)
+                             double min_motion_duration,
+                             std::string post_process_libs)
     : temp_dir_(std::move(temp_dir)), final_dir_(std::move(final_dir)),
       motion_detect_file_(std::move(motion_detect_file)),
-      min_motion_duration_(min_motion_duration), stop_requested_(false) {
+      min_motion_duration_(min_motion_duration),
+      post_process_libs_(std::move(post_process_libs)), stop_requested_(false) {
   fs::create_directories(temp_dir_);
   fs::create_directories(final_dir_);
   worker_ = std::thread([this]() { process_conversions(); });
@@ -66,13 +70,19 @@ CameraService::~CameraService() {
 }
 
 std::expected<void, std::string> CameraService::run() {
+  std::string libs_arg =
+      post_process_libs_.empty()
+          ? ""
+          : std::format("--post-process-libs={} ", post_process_libs_);
   std::string cmd = std::format(
       "rpicam-vid -t 0 --inline --nopreview --width=1280 --height=720 "
-      "--framerate=30 --lores-width=160 --lores-height=120 "
+      "--framerate=30 --lores-width=320 --lores-height=240 "
       "--bitrate=400000 "
       "--lens-position=0.04 --autofocus-mode=manual "
-      "--post-process-file={} -o - 2>&1",
-      motion_detect_file_);
+      "--post-process-file={} "
+      "{}"
+      "-o - 2>&1",
+      motion_detect_file_, libs_arg);
 
   FILE *pipe = popen(cmd.c_str(), "r");
   if (!pipe)
@@ -139,7 +149,7 @@ std::expected<void, std::string> CameraService::run() {
               profile_name = "High";
 
             Log(std::format("H.264 Stream Info: Profile {} ({}), Level {:.1f}",
-                           profile_idc, profile_name, level_idc / 10.0));
+                            profile_idc, profile_name, level_idc / 10.0));
 
             // Capture SPS + PPS. Usually they are consecutive.
             // We'll search for the next NAL after SPS that isn't PPS, or just
@@ -163,7 +173,7 @@ std::expected<void, std::string> CameraService::run() {
                                    buffer.begin() + end);
             has_sps_pps_ = true;
             Log(std::format("Cached {} bytes of SPS/PPS header",
-                           cached_sps_pps_.size()));
+                            cached_sps_pps_.size()));
             break;
           }
         }

@@ -24,6 +24,7 @@ ABSL_DECLARE_FLAG(std::string, final_dir);
 ABSL_DECLARE_FLAG(std::string, motion_detect_file);
 ABSL_DECLARE_FLAG(bool, log_timestamps);
 ABSL_DECLARE_FLAG(double, min_motion_duration);
+ABSL_DECLARE_FLAG(std::string, post_process_libs);
 
 struct ConversionTask {
   std::string src_;
@@ -34,7 +35,8 @@ class CameraService {
 public:
   CameraService(std::string temp_dir, std::string final_dir,
                 std::string motion_detect_file,
-                double min_motion_duration = 0.0);
+                double min_motion_duration = 0.0,
+                std::string post_process_libs = "");
   ~CameraService();
 
   std::expected<void, std::string> run();
@@ -49,6 +51,7 @@ private:
   const std::string final_dir_;
   const std::string motion_detect_file_;
   const double min_motion_duration_;
+  const std::string post_process_libs_;
   std::thread worker_;
   bool stop_requested_;
   std::mutex mtx_;
