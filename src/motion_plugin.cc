@@ -66,6 +66,7 @@ public:
     auto regions =
         subtractor_->Process(buffer.subspan(0, frame_size_), motion_map_);
     bool motion_detected = regions > config_.motion_threshold;
+    LOG(1, "Motion detected regions " << regions);
 
     completed_request->post_process_metadata.Set("motion_detector.result",
                                                  regions);
