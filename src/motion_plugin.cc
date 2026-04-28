@@ -4,6 +4,7 @@ struct Options {
 };
 #include "core/rpicam_app.hpp"
 #include "post_processing_stages/post_processing_stage.hpp"
+#include <boost/format.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <filesystem>
@@ -96,8 +97,9 @@ public:
         std::ofstream frame_trigger_file;
         frame_trigger_file.open(
             config_.freeze_frames_dir +
-                std::format("/{}_{}.yuv", completed_request->sequence,
-                            motion_detected ? "start" : "stop"),
+                boost::str(boost::format("/%1%_%2%.yuv") %
+                           completed_request->sequence %
+                           (motion_detected ? "start" : "stop")),
             std::ios::binary);
         if (!frame_trigger_file.is_open()) {
           LOG(1, "Failed to open frame trigger file");
