@@ -6,6 +6,7 @@ struct Options {
 #include "post_processing_stages/post_processing_stage.hpp"
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <filesystem>
 #include <fstream>
 #include <libcamera/stream.h>
 #include <memory>
@@ -14,7 +15,7 @@ struct Options {
 #include <vector>
 
 using Stream = libcamera::Stream;
-
+namespace fs = std::filesystem;
 void print_ptree(const boost::property_tree::ptree &pt) {
   // This writes the tree to std::cout in a pretty-printed JSON format
   boost::property_tree::write_json(std::cout, pt);
@@ -43,6 +44,11 @@ public:
     config_.skip_initial_frames = params.get<int>("skip_initial_frames", 0);
     config_.capture_frames_to_file =
         params.get<std::string>("capture_frames_to_file", std::string{});
+    config_.freeze_frames_dir =
+        params.get<std::string>("freeze_frames_dir", std::string{});
+    if (!config_.freeze_frames_dir.empty()) {
+      fs::create_directories(config_.freeze_frames_dir);
+    }
   }
 
   virtual bool Process(CompletedRequestPtr &completed_request) override {
@@ -81,8 +87,25 @@ public:
       }
     }
 
-    if (config_.log_level >= 1 && motion_detected != motion_detected_) {
-      LOG(1, "Motion " << (motion_detected ? "detected ++++" : "stopped ----"));
+    if (motion_detected != motion_detected_) {
+      if (config_.log_level >= 1) {
+        LOG(1,
+            "Motion " << (motion_detected ? "detected ++++" : "stopped ----"));
+      }
+      if (!config_.freeze_frames_dir.empty()) {
+        std::ofstream frame_trigger_file;
+        frame_trigger_file.open(
+            config_.freeze_frames_dir +
+                std::format("/{}_{}.yuv", completed_request->sequence,
+                            motion_detected ? "start" : "stop"),
+            std::ios::binary);
+        if (!frame_trigger_file.is_open()) {
+          LOG(1, "Failed to open frame trigger file");
+        } else {
+          frame_trigger_file.write(
+              reinterpret_cast<const char *>(buffer.data()), buffer.size());
+        }
+      }
     }
     motion_detected_ = motion_detected;
 
@@ -111,6 +134,7 @@ private:
     uint8_t log_level;
     uint8_t skip_initial_frames;
     std::string capture_frames_to_file;
+    std::string freeze_frames_dir;
   } config_;
   Stream *stream_ = nullptr;
   std::mutex mutex_;

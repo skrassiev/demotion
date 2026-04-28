@@ -17,6 +17,7 @@
 		"frame_period": 5,
 		"log_level": 1,
 		"motion_threshold": 0,
-		"capture_frames_to_file": ""
+		"capture_frames_to_file": "",
+		"freeze_frames_dir": "./motion_freeze_frames"
 	}
 }
