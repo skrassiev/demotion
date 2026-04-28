@@ -53,6 +53,9 @@ public:
         completed_request->sequence % config_.frame_period)
       return false;
 
+    if (completed_request->sequence < config_.skip_initial_frames)
+      return false;
+
     BufferReadSync r(app_, completed_request->buffers[stream_]);
     libcamera::Span<uint8_t> buffer = r.Get()[0];
 
