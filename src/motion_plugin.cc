@@ -66,7 +66,7 @@ public:
     auto regions =
         subtractor_->Process(buffer.subspan(0, frame_size_), motion_map_);
     bool motion_detected = regions > config_.motion_threshold;
-    LOG(1, "Motion detected regions " << regions);
+    LOG(1, "Modified regions: " << regions);
 
     completed_request->post_process_metadata.Set("motion_detector.result",
                                                  regions);
@@ -82,7 +82,7 @@ public:
     }
 
     if (config_.log_level >= 1 && motion_detected != motion_detected_) {
-      LOG(1, "Motion " << (motion_detected ? "detected" : "stopped"));
+      LOG(1, "Motion " << (motion_detected ? "detected ++++" : "stopped ----"));
     }
     motion_detected_ = motion_detected;
 
