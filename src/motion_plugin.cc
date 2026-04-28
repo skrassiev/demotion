@@ -26,7 +26,7 @@ public:
 
   MotionPlugin(RPiCamApp *app) : PostProcessingStage(app) {
     // Initialize with fixed dimensions; can be updated via Read()
-    subtractor_ = std::make_unique<BackgroundSubtractor>(320, 240, 0.05f);
+    subtractor_ = std::make_unique<BackgroundSubtractor>(320, 240);
     LOG(1, "MOG2 Motion::New");
   }
 
@@ -34,23 +34,21 @@ public:
 
   virtual void Read(boost::property_tree::ptree const &params) override {
     // Optional: read parameters from JSON
-    LOG(1, "MOG2 Motion::Read params.vebose=" << params.get<bool>("verbose",
-                                                                  false));
+    LOG(1, "MOG2 Motion::Read");
     print_ptree(params);
+
     config_.frame_period = params.get<int>("frame_period", 5);
-    config_.verbose = params.get<bool>("verbose", false);
-    LOG(1, "MOG2 Motion::Read verbose=" << config_.verbose);
+    config_.log_level = params.get<int>("log_level", 1);
+    config_.motion_threshold = params.get<int>("motion_threshold", 0);
+    config_.skip_initial_frames = params.get<int>("skip_initial_frames", 0);
+    config_.capture_frames_to_file =
+        params.get<std::string>("capture_frames_to_file", std::string{});
   }
 
   virtual bool Process(CompletedRequestPtr &completed_request) override {
     // 1. Get image from completed_request
     // 2. Wrap in std::span
     // 3. subtractor_->Process(...)	if (!stream_)
-    // LOG(1, "MOG2 Motion::Process");
-    // LOG(1, "Framerate: " << completed_request->framerate);
-    // LOG(1, "Buffers: " << completed_request->buffers.size());
-    // LOG(1, "Libcamera Metadata: " << completed_request->metadata.size()
-    //                               << " entries");
     if (config_.frame_period &&
         completed_request->sequence % config_.frame_period)
       return false;
@@ -64,25 +62,27 @@ public:
 
     auto regions =
         subtractor_->Process(buffer.subspan(0, frame_size_), motion_map_);
-    bool motion_detected = regions > 0;
+    bool motion_detected = regions > config_.motion_threshold;
 
     completed_request->post_process_metadata.Set("motion_detector.result",
                                                  regions);
-    if (!debug_file_.is_open()) {
-      debug_file_.open("motion_debug.bin", std::ios::binary);
-    }
-    if (debug_file_.is_open()) {
-      debug_file_.write(reinterpret_cast<const char *>(buffer.data()),
-                        buffer.size());
-      debug_file_.flush();
+    if (!config_.capture_frames_to_file.empty()) {
+      if (!debug_file_.is_open()) {
+        debug_file_.open("motion_debug.bin", std::ios::binary);
+      }
+      if (debug_file_.is_open()) {
+        debug_file_.write(reinterpret_cast<const char *>(buffer.data()),
+                          buffer.size());
+        debug_file_.flush();
+      }
     }
 
-    if (config_.verbose && motion_detected != motion_detected_) {
+    if (config_.log_level >= 1 && motion_detected != motion_detected_) {
       LOG(1, "Motion " << (motion_detected ? "detected" : "stopped"));
     }
     motion_detected_ = motion_detected;
 
-    return regions > 0;
+    return motion_detected_;
   }
 
   virtual void Configure() override {
@@ -93,7 +93,7 @@ public:
       return;
     LOG(1, "MOG2 Motion::Configure: " << info.width << " " << info.height);
     subtractor_ =
-        std::make_unique<BackgroundSubtractor>(info.width, info.height, 0.05f);
+        std::make_unique<BackgroundSubtractor>(info.width, info.height);
     frame_size_ = info.width * info.height;
     motion_map_.resize(frame_size_);
   }
@@ -102,21 +102,17 @@ private:
   std::unique_ptr<BackgroundSubtractor> subtractor_;
 
   struct Config {
-    float roi_x, roi_y;
-    float roi_width, roi_height;
-    int hskip, vskip;
-    float difference_m;
-    int difference_c;
-    float region_threshold;
+    uint16_t motion_threshold;
     int frame_period;
-    bool verbose;
-    std::string region_name;
+    uint8_t log_level;
+    uint8_t skip_initial_frames;
+    std::string capture_frames_to_file;
   } config_;
   Stream *stream_ = nullptr;
   std::mutex mutex_;
   bool motion_detected_ = false;
   std::vector<uint8_t> motion_map_;
-  uint16_t frame_size_;
+  uint16_t frame_size_ = uint16_t(320 * 240);
   std::ofstream debug_file_;
 };
 

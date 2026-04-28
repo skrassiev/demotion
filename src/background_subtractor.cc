@@ -1,6 +1,5 @@
 #include "background_subtractor.h"
 #include <algorithm>
-#include <cmath>
 
 uint32_t BackgroundSubtractor::Process(std::span<const uint8_t> frame,
                                        std::vector<uint8_t> &motion_map) {
